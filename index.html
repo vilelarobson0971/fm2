@@ -145,6 +145,22 @@
             color: rgba(255, 255, 255, 0.65);
         }
 
+        /* Vinil GIF animado - substitui o ícone da Disco 80 quando está tocando */
+        .vinyl-gif {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            animation: spin 2s linear infinite;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 15px rgba(233, 30, 99, 0.4);
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         /* Badge AO VIVO */
         .live-badge {
             display: inline-flex;
@@ -381,6 +397,10 @@
                 font-size: 0.88rem !important;
                 padding: 9px 14px !important;
             }
+            .vinyl-gif {
+                width: 32px;
+                height: 32px;
+            }
         }
 
         @media (max-width: 480px) {
@@ -392,6 +412,10 @@
             }
             .player-container {
                 padding: 18px 14px;
+            }
+            .vinyl-gif {
+                width: 28px;
+                height: 28px;
             }
         }
 
@@ -545,12 +569,21 @@
                 genre: "80s Best Hits",
                 format: "audio/mpeg"
             },
-            // ===== RÁDIO DISCO 80 =====
             "Disco 80": {
                 url: "https://stream-285.surfernetwork.com/wmb9se6bseruv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJ3bWI5c2U2YnNlcnV2IiwiaG9zdCI6InN0cmVhbS0yODUuc3VyZmVybmV0d29yay5jb20iLCJydHRsIjo1LCJqdGkiOiJ3akN5dWo1VlNwS0RMT09KN3o5clNBIiwiaWF0IjoxNzg4MTM0NTk0LCJleHAiOjE3ODgxMzQ2NTR9.FEVtCLOPKWwi5WXs_w0jEfna8xISM5c-bxSgTPDMPwI",
                 color: "#E91E63",
                 icon: "🪩",
                 genre: "Disco / 80s Dance",
+                format: "audio/mpeg",
+                // Marcação especial para usar GIF de vinil
+                useVinylGif: true
+            },
+            // ===== RÁDIO ROCK NACIONAL =====
+            "Rock Nacional": {
+                url: "https://c4.radioboss.fm:8216/rockva?rva=2",
+                color: "#2ECC71",
+                icon: "🇧🇷",
+                genre: "Rock Nacional",
                 format: "audio/mpeg"
             }
         };
@@ -615,11 +648,19 @@
                 const btnText = isPlaying ? '⏸️ Tocando agora' : '▶️ Ouvir agora';
                 const btnClass = isPlaying ? 'btn playing' : 'btn';
 
+                // Verifica se é a Disco 80 e se deve usar o GIF de vinil
+                let iconHtml = info.icon;
+                if (info.useVinylGif && isPlaying) {
+                    iconHtml = `<img src="https://i.gifer.com/origin/5d/5d1eabe22fa5f85c5aacb810baa46281_w200.gif" alt="Vinil" class="vinyl-gif" />`;
+                } else if (info.useVinylGif && !isPlaying) {
+                    iconHtml = info.icon;
+                }
+
                 html += `
                     <div class="radio-card" style="background:${bgGrad}; border:1px solid ${borderColor}; box-shadow:${borderGlow};"
                          data-radio="${name}">
                         <div class="top">
-                            <div class="icon">${info.icon}</div>
+                            <div class="icon">${iconHtml}</div>
                             <div class="info">
                                 <div class="name">${name}</div>
                                 <div class="genre">${info.genre}</div>
