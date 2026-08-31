@@ -531,7 +531,6 @@
                 genre: "80s/90s",
                 format: "audio/mpeg"
             },
-            // ===== RÁDIO NOSTALGIA FM =====
             "Nostalgia FM": {
                 url: "https://centova2.euroti.com.br:20062/;",
                 color: "#F39C12",
@@ -539,12 +538,19 @@
                 genre: "Flashback / Nostalgia",
                 format: "audio/mpeg"
             },
-            // ===== RÁDIO 80's BEST =====
             "80's Best": {
                 url: "https://stream-289.surfernetwork.com/g69brm53t8quv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJnNjlicm01M3Q4cXV2IiwiaG9zdCI6InN0cmVhbS0yODkuc3VyZmVybmV0d29yay5jb20iLCJydHRsIjo1LCJqdGkiOiJXQTJPZ284RFRsQ1hveS1PNy1CVXF3IiwiaWF0IjoxNzg4MTM0MTMzLCJleHAiOjE3ODgxMzQxOTN9.HGDq8p3m14cYqZq4F11sQQuULkmGs7bL1k2OvrHL0ro",
                 color: "#1ABC9C",
                 icon: "🎧",
                 genre: "80s Best Hits",
+                format: "audio/mpeg"
+            },
+            // ===== RÁDIO DISCO 80 =====
+            "Disco 80": {
+                url: "https://stream-285.surfernetwork.com/wmb9se6bseruv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJ3bWI5c2U2YnNlcnV2IiwiaG9zdCI6InN0cmVhbS0yODUuc3VyZmVybmV0d29yay5jb20iLCJydHRsIjo1LCJqdGkiOiJ3akN5dWo1VlNwS0RMT09KN3o5clNBIiwiaWF0IjoxNzg4MTM0NTk0LCJleHAiOjE3ODgxMzQ2NTR9.FEVtCLOPKWwi5WXs_w0jEfna8xISM5c-bxSgTPDMPwI",
+                color: "#E91E63",
+                icon: "🪩",
+                genre: "Disco / 80s Dance",
                 format: "audio/mpeg"
             }
         };
@@ -552,7 +558,7 @@
         // ================================================================
         // ESTADO
         // ================================================================
-        let currentRadio = null; // nome da rádio atual
+        let currentRadio = null;
         const radioNames = Object.keys(RADIOS);
 
         // ================================================================
@@ -570,115 +576,70 @@
         // FUNÇÕES
         // ================================================================
 
-        /** Atualiza a cor do player conforme a rádio selecionada */
         function updatePlayerColor(color) {
             playerContainer.style.background =
                 `linear-gradient(135deg, ${color}33 0%, rgba(255,255,255,0.04) 100%)`;
             playerContainer.style.borderColor = `${color}66`;
         }
 
-        /** Toca uma rádio */
         function playRadio(name) {
             const info = RADIOS[name];
             if (!info) return;
 
             currentRadio = name;
-
-            // Atualiza título e gênero
             playerName.textContent = `${info.icon} ${name}`;
             playerGenre.textContent = `🎵 ${info.genre}`;
-
-            // Configura o áudio
             audioEl.src = info.url;
             audioEl.type = info.format || 'audio/mpeg';
             audioEl.load();
-
-            // Tenta dar play (autoplay pode ser bloqueado)
-            audioEl.play().catch(() => {
-                // silencioso — o usuário pode clicar no botão do card
-            });
-
-            // Mostra o player
+            audioEl.play().catch(() => {});
             playerWrapper.classList.remove('hidden');
-
-            // Atualiza cor
             updatePlayerColor(info.color);
-
-            // Atualiza dica
-            playerHint.textContent =
-                'Se o som não iniciar automaticamente, toque no botão "Tocando agora" do cartão acima.';
-
-            // Re-renderiza os cards para atualizar badges e botões
+            playerHint.textContent = 'Se o som não iniciar automaticamente, toque no botão "Tocando agora" do cartão acima.';
             renderCards();
         }
 
-        /** Para a reprodução (apenas esconde o player, não para o áudio de fato) */
-        function stopRadio() {
-            // Não paramos o áudio para não dar erro, só escondemos
-            // Mas se quiser parar: audioEl.pause();
-            currentRadio = null;
-            playerWrapper.classList.add('hidden');
-            renderCards();
-        }
-
-        /** Cria o HTML de um card */
-        function createCardHTML(name, info, isPlaying) {
-            const borderGlow = isPlaying ?
-                `0 0 0 1px ${info.color}aa, 0 8px 22px rgba(0,0,0,0.35)` :
-                `0 6px 16px rgba(0,0,0,0.25)`;
-
-            const bgGrad = `linear-gradient(155deg, ${info.color}26, rgba(255,255,255,0.03))`;
-            const borderColor = `${info.color}55`;
-
-            // Badge "NO AR"
-            const badgeHTML = isPlaying ?
-                `<span class="live-badge"><span class="live-dot"></span>NO AR</span>` :
-                '';
-
-            // Botão
-            const btnText = isPlaying ? '⏸️ Tocando agora' : '▶️ Ouvir agora';
-            const btnClass = isPlaying ? 'btn playing' : 'btn';
-
-            return `
-                <div class="radio-card" style="background:${bgGrad}; border:1px solid ${borderColor}; box-shadow:${borderGlow};"
-                     data-radio="${name}">
-                    <div class="top">
-                        <div class="icon">${info.icon}</div>
-                        <div class="info">
-                            <div class="name">${name}</div>
-                            <div class="genre">${info.genre}</div>
-                        </div>
-                        ${badgeHTML}
-                    </div>
-                    <button class="${btnClass}" data-radio="${name}">${btnText}</button>
-                </div>
-            `;
-        }
-
-        /** Renderiza todos os cards no grid */
         function renderCards() {
             let html = '';
             for (const name of radioNames) {
                 const info = RADIOS[name];
                 const isPlaying = (currentRadio === name);
-                html += createCardHTML(name, info, isPlaying);
+                const borderGlow = isPlaying ?
+                    `0 0 0 1px ${info.color}aa, 0 8px 22px rgba(0,0,0,0.35)` :
+                    `0 6px 16px rgba(0,0,0,0.25)`;
+                const bgGrad = `linear-gradient(155deg, ${info.color}26, rgba(255,255,255,0.03))`;
+                const borderColor = `${info.color}55`;
+                const badgeHTML = isPlaying ?
+                    `<span class="live-badge"><span class="live-dot"></span>NO AR</span>` :
+                    '';
+                const btnText = isPlaying ? '⏸️ Tocando agora' : '▶️ Ouvir agora';
+                const btnClass = isPlaying ? 'btn playing' : 'btn';
+
+                html += `
+                    <div class="radio-card" style="background:${bgGrad}; border:1px solid ${borderColor}; box-shadow:${borderGlow};"
+                         data-radio="${name}">
+                        <div class="top">
+                            <div class="icon">${info.icon}</div>
+                            <div class="info">
+                                <div class="name">${name}</div>
+                                <div class="genre">${info.genre}</div>
+                            </div>
+                            ${badgeHTML}
+                        </div>
+                        <button class="${btnClass}" data-radio="${name}">${btnText}</button>
+                    </div>
+                `;
             }
             grid.innerHTML = html;
 
-            // Adiciona event listeners nos botões E nos cards (clique no card = mesmo que clicar no botão)
             const cards = grid.querySelectorAll('.radio-card');
             cards.forEach(card => {
                 const name = card.dataset.radio;
                 const btn = card.querySelector('.btn');
-
-                // Clique no card (exceto se clicou no botão, mas não tem problema)
                 card.addEventListener('click', (e) => {
-                    // Se clicou no botão, o botão já vai disparar
                     if (e.target.tagName === 'BUTTON') return;
                     handleRadioClick(name);
                 });
-
-                // Clique no botão
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     handleRadioClick(name);
@@ -686,20 +647,13 @@
             });
         }
 
-        /** Lógica de clique numa rádio */
         function handleRadioClick(name) {
             const info = RADIOS[name];
             if (!info) return;
-
-            // Se já está tocando esta rádio, tenta dar play novamente (resume)
             if (currentRadio === name) {
-                // Tenta dar play novamente (caso tenha sido pausado ou bloqueado)
                 audioEl.play().catch(() => {});
-                // Atualiza a interface (já está ativa)
                 return;
             }
-
-            // Caso contrário, toca a nova rádio
             playRadio(name);
         }
 
@@ -707,7 +661,6 @@
         // INICIALIZAÇÃO
         // ================================================================
         renderCards();
-
         console.log('🎵 Neuros Som 80s carregado!');
     </script>
 
