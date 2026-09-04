@@ -1,492 +1,1075 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { 
-  Radio, 
-  Search, 
-  Heart, 
-  Sparkles, 
-  Volume2, 
-  Filter, 
-  Flame, 
-  Music2, 
-  Car, 
-  Info,
-  RotateCcw
-} from 'lucide-react';
-import { RADIOS } from './data/radios';
-import { RadioStation, PlaybackStatus, CategoryFilter } from './types';
-import { Header } from './components/Header';
-import { VinylPlayer } from './components/VinylPlayer';
-import { RadioCard } from './components/RadioCard';
-import { BottomPlayerBar } from './components/BottomPlayerBar';
-import { CarModeModal } from './components/CarModeModal';
-import { BluetoothGuideModal } from './components/BluetoothGuideModal';
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Neuros Som 80s - Web Rádio & Car Player</title>
+  <meta name="description" content="Player moderno de web rádios dos anos 80 de alta fidelidade para celular, fone e som automotivo via Bluetooth." />
+  <meta name="theme-color" content="#120729" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
-const CATEGORIES: { id: CategoryFilter; label: string; icon: string }[] = [
-  { id: 'all', label: 'Todas', icon: '📻' },
-  { id: 'favoritas', label: 'Favoritas', icon: '❤️' },
-  { id: 'rock', label: 'Rock', icon: '🤘' },
-  { id: 'pop', label: 'Pop Hits', icon: '🎤' },
-  { id: 'flashback', label: 'Flashback', icon: '📼' },
-  { id: 'dance', label: 'Disco & Dance', icon: '🪩' },
-  { id: 'nacional', label: 'Rock Nacional', icon: '🇧🇷' },
-];
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 
-export default function App() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const playerDeckRef = useRef<HTMLDivElement | null>(null);
-
-  // Load initial station & favorites from localStorage if present
-  const [currentStation, setCurrentStation] = useState<RadioStation>(() => {
-    try {
-      const saved = localStorage.getItem('neuros_last_station');
-      if (saved) {
-        const found = RADIOS.find((r) => r.id === saved);
-        if (found) return found;
-      }
-    } catch {
-      // ignore
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
-    return RADIOS[0];
-  });
 
-  const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>('idle');
-  const [volume, setVolume] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem('neuros_volume');
-      if (saved !== null) return parseFloat(saved);
-    } catch {
-      // ignore
+    :root {
+      --bg-dark: #080313;
+      --card-bg: rgba(255, 255, 255, 0.04);
+      --card-border: rgba(255, 255, 255, 0.09);
+      --accent-gold: #FFD15C;
+      --accent-pink: #FF4D6D;
+      --accent-cyan: #22D3EE;
     }
-    return 0.85;
-  });
-  const [isMuted, setIsMuted] = useState(false);
 
-  const [favorites, setFavorites] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('neuros_favorites');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
+    body {
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      background: radial-gradient(circle at 15% 15%, #250d44 0%, #110626 35%, #070210 100%);
+      color: #F1F5F9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 14px 100px;
+      overflow-x: hidden;
     }
-    return ['disco-80', 'rock-nacional', 'kiss-fm'];
-  });
 
-  const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isCarModeOpen, setIsCarModeOpen] = useState(false);
-  const [isBluetoothGuideOpen, setIsBluetoothGuideOpen] = useState(false);
-  const [usingBackupStream, setUsingBackupStream] = useState(false);
-
-  // Sync volume with audio element and localStorage
-  useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.volume = isMuted ? 0 : volume;
+    .app-container {
+      width: 100%;
+      max-width: 1060px;
+      margin: 0 auto;
     }
-    try {
-      localStorage.setItem('neuros_volume', volume.toString());
-    } catch {
-      // ignore
-    }
-  }, [volume, isMuted]);
 
-  // Sync favorites with localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('neuros_favorites', JSON.stringify(favorites));
-    } catch {
-      // ignore
+    /* HEADER */
+    .header {
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 24px 20px;
+      margin-bottom: 24px;
+      backdrop-blur: 16px;
+      -webkit-backdrop-blur: 16px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
-  }, [favorites]);
 
-  // Sync last played station
-  useEffect(() => {
-    if (currentStation) {
-      try {
-        localStorage.setItem('neuros_last_station', currentStation.id);
-      } catch {
-        // ignore
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        padding: 28px 30px;
       }
     }
-  }, [currentStation]);
 
-  // Play audio safely
-  const startAudioPlayback = useCallback(async (station: RadioStation, useBackup = false) => {
-    if (!audioRef.current) return;
-    const audio = audioRef.current;
-    
-    setPlaybackStatus('loading');
-    const streamUrl = (useBackup && station.backupUrl) ? station.backupUrl : station.url;
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 209, 92, 0.12);
+      border: 1px solid rgba(255, 209, 92, 0.35);
+      color: var(--accent-gold);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      text-transform: uppercase;
+    }
 
-    // Reset audio source
-    audio.pause();
-    audio.src = streamUrl;
-    audio.load();
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      background: #10B981;
+      border-radius: 50%;
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.8); }
+      70% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    .header-title {
+      font-size: clamp(1.8rem, 4.5vw, 2.7rem);
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(90deg, #FFE89E, #FFD15C, #FF758F);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-top: 6px;
+      line-height: 1.15;
+    }
+
+    .header-desc {
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 0.92rem;
+      margin-top: 4px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-car-mode {
+      background: linear-gradient(135deg, #FFB703, #FB8500);
+      color: #05020c;
+      font-weight: 800;
+      font-size: 0.86rem;
+      padding: 10px 18px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 8px 24px rgba(251, 133, 0, 0.35);
+      transition: transform 0.2s;
+    }
+
+    .btn-car-mode:active { transform: scale(0.96); }
+
+    .btn-guide {
+      background: rgba(255, 255, 255, 0.07);
+      color: #F8FAFC;
+      font-weight: 600;
+      font-size: 0.86rem;
+      padding: 10px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* TURNTABLE / VINYL PLAYER */
+    .player-deck {
+      position: relative;
+      overflow: hidden;
+      background: rgba(14, 7, 28, 0.85);
+      border: 1px solid rgba(255, 209, 92, 0.3);
+      border-radius: 26px;
+      padding: 24px 20px;
+      margin-bottom: 28px;
+      backdrop-blur: 20px;
+      -webkit-backdrop-blur: 20px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+      transition: border-color 0.4s;
+    }
+
+    @media (min-width: 768px) {
+      .player-deck {
+        flex-direction: row;
+        padding: 28px 32px;
+        gap: 36px;
+      }
+    }
+
+    .vinyl-wrapper {
+      position: relative;
+      width: 170px;
+      height: 170px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    @media (min-width: 480px) {
+      .vinyl-wrapper {
+        width: 190px;
+        height: 190px;
+      }
+    }
+
+    .vinyl-platter {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      padding: 8px;
+      background: radial-gradient(circle, #252525 0%, #101010 100%);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8), 0 0 0 2px rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .vinyl-disc {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: radial-gradient(
+        circle at center,
+        #111 0%, #1d1d1d 20%, #0b0b0b 21%,
+        #222 40%, #0e0e0e 41%, #181818 60%,
+        #0a0a0a 61%, #222 80%, #070707 100%
+      );
+      box-shadow: inset 0 0 16px rgba(0, 0, 0, 0.95);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .vinyl-disc::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: conic-gradient(
+        from 30deg,
+        rgba(255, 255, 255, 0.08) 0deg,
+        transparent 60deg,
+        rgba(255, 255, 255, 0.12) 120deg,
+        transparent 180deg,
+        rgba(255, 255, 255, 0.08) 240deg,
+        transparent 300deg,
+        rgba(255, 255, 255, 0.12) 360deg
+      );
+      pointer-events: none;
+    }
+
+    .vinyl-label {
+      position: relative;
+      width: 68px;
+      height: 68px;
+      border-radius: 50%;
+      background: #FF6B6B;
+      border: 2px solid rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.5);
+      z-index: 2;
+      transition: background-color 0.4s;
+    }
+
+    .vinyl-label-icon { font-size: 1.5rem; line-height: 1; }
+    .vinyl-label-text { font-size: 7px; font-weight: 800; color: #000; letter-spacing: 0.5px; text-transform: uppercase; margin-top: 2px; }
+    .vinyl-spindle { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: #0b0518; border: 1px solid #777; }
+
+    .tonearm {
+      position: absolute;
+      top: -4px;
+      right: 2px;
+      width: 48px;
+      height: 70px;
+      pointer-events: none;
+      transform-origin: top right;
+      transform: rotate(-16deg);
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 10;
+    }
+
+    .tonearm-head { position: absolute; top: 0; right: 0; width: 14px; height: 14px; border-radius: 50%; background: #cbd5e1; border: 1px solid #fff; }
+    .tonearm-arm { position: absolute; top: 8px; right: 5px; width: 3px; height: 52px; background: linear-gradient(to bottom, #cbd5e1, #94a3b8, #f59e0b); border-radius: 2px; }
+    .tonearm-cartridge { position: absolute; bottom: 2px; right: 3px; width: 8px; height: 10px; background: #111; border: 1px solid #666; border-radius: 2px; }
+
+    .spinning { animation: spin-record 2.6s linear infinite; }
+    .playing .tonearm { transform: rotate(10deg); }
+
+    @keyframes spin-record {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    .deck-content { flex: 1; width: 100%; display: flex; flex-direction: column; justify-content: space-between; }
+    .deck-status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+    .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; }
+    .status-live { background: rgba(239, 68, 68, 0.18); border: 1px solid rgba(239, 68, 68, 0.45); color: #FCA5A5; }
+    .status-loading { background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(245, 158, 11, 0.45); color: #FCD34D; }
+    .status-paused { background: rgba(148, 163, 184, 0.15); border: 1px solid rgba(148, 163, 184, 0.3); color: #CBD5E1; }
+
+    .deck-station-name { font-size: clamp(1.4rem, 3.2vw, 2.1rem); font-weight: 800; color: #FFF; margin-top: 8px; display: flex; align-items: center; gap: 10px; }
+    .deck-station-genre { font-size: 0.9rem; color: rgba(255, 255, 255, 0.75); font-weight: 500; margin-top: 2px; }
+
+    .equalizer-bar-container {
+      margin-top: 14px;
+      height: 24px;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 10px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .eq-label { font-size: 9px; font-weight: 800; color: rgba(255, 255, 255, 0.4); letter-spacing: 0.6px; margin-right: 6px; user-select: none; }
+    .eq-bar { flex: 1; height: 4px; background: #FFD15C; border-radius: 2px; }
+
+    .playing .eq-bar:nth-child(2) { animation: eq-anim 0.6s infinite alternate; }
+    .playing .eq-bar:nth-child(3) { animation: eq-anim 0.8s infinite alternate 0.1s; }
+    .playing .eq-bar:nth-child(4) { animation: eq-anim 0.5s infinite alternate 0.3s; }
+    .playing .eq-bar:nth-child(5) { animation: eq-anim 0.9s infinite alternate 0.2s; }
+    .playing .eq-bar:nth-child(6) { animation: eq-anim 0.7s infinite alternate 0.4s; }
+    .playing .eq-bar:nth-child(7) { animation: eq-anim 0.5s infinite alternate 0.15s; }
+    .playing .eq-bar:nth-child(8) { animation: eq-anim 0.85s infinite alternate 0.25s; }
+    .playing .eq-bar:nth-child(9) { animation: eq-anim 0.65s infinite alternate 0.05s; }
+    .playing .eq-bar:nth-child(10) { animation: eq-anim 0.95s infinite alternate 0.35s; }
+    .playing .eq-bar:nth-child(11) { animation: eq-anim 0.55s infinite alternate 0.18s; }
+    .playing .eq-bar:nth-child(12) { animation: eq-anim 0.75s infinite alternate 0.28s; }
+
+    @keyframes eq-anim { 0% { height: 4px; } 100% { height: 18px; } }
+
+    .deck-controls-row {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    @media (min-width: 640px) {
+      .deck-controls-row {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+      }
+    }
+
+    .playback-btns { display: flex; align-items: center; gap: 12px; }
+    .btn-circle {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #F8FAFC;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .btn-circle:active { transform: scale(0.92); }
+
+    .btn-play-hero {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: var(--accent-gold);
+      color: #0F081D;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(255, 209, 92, 0.4);
+    }
+
+    .btn-play-hero:active { transform: scale(0.92); }
+
+    .volume-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 8px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .volume-slider {
+      -webkit-appearance: none;
+      width: 90px;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--accent-gold);
+      cursor: pointer;
+    }
+
+    /* FILTERS & SEARCH */
+    .controls-bar { margin-bottom: 20px; display: flex; flex-direction: column; gap: 14px; }
+    @media (min-width: 768px) {
+      .controls-bar { flex-direction: row; align-items: center; justify-content: space-between; }
+    }
+
+    .search-input-wrapper { position: relative; width: 100%; max-width: 320px; }
+    .search-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 10px 14px 10px 38px;
+      color: #FFF;
+      font-size: 0.88rem;
+      outline: none;
+    }
+
+    .search-input:focus { border-color: var(--accent-gold); }
+    .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: rgba(255, 255, 255, 0.4); pointer-events: none; }
+
+    .category-pills { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+    .category-pills::-webkit-scrollbar { display: none; }
+    .cat-pill {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .cat-pill.active {
+      background: var(--accent-gold);
+      color: #0F081D;
+      border-color: var(--accent-gold);
+      box-shadow: 0 4px 16px rgba(255, 209, 92, 0.3);
+    }
+
+    /* CARDS GRID */
+    .radio-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    @media (min-width: 560px) { .radio-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 880px) { .radio-grid { grid-template-columns: repeat(3, 1fr); } }
+
+    .radio-card {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 18px;
+      padding: 16px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.2s, background 0.2s, border-color 0.2s;
+    }
+
+    .radio-card:hover { background: rgba(255, 255, 255, 0.07); transform: translateY(-2px); }
+    .radio-card.active { border-color: var(--accent-gold); background: rgba(255, 255, 255, 0.08); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); }
+
+    .card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+    .card-icon-box { width: 44px; height: 44px; border-radius: 14px; background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; }
+    .card-title-group { flex: 1; min-width: 0; }
+    .card-title { font-size: 0.98rem; font-weight: 700; color: #FFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-genre { font-size: 0.76rem; color: rgba(255, 255, 255, 0.6); margin-top: 2px; }
+    .card-fav-btn { background: transparent; border: none; font-size: 1.1rem; cursor: pointer; padding: 4px; color: rgba(255, 255, 255, 0.3); }
+    .card-fav-btn.favorited { color: #FF4D6D; }
+
+    .card-bottom { margin-top: 14px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.06); display: flex; align-items: center; justify-content: space-between; }
+    .card-bitrate { font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); font-weight: 600; }
+    .card-play-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #FFF;
+      font-size: 0.74rem;
+      font-weight: 700;
+      padding: 6px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .radio-card.active.playing .card-play-btn { background: var(--accent-gold); color: #0F081D; border-color: var(--accent-gold); }
+
+    /* STICKY BOTTOM PLAYER */
+    .bottom-bar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      z-index: 50;
+      background: rgba(13, 6, 26, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+      backdrop-blur: 16px;
+      -webkit-backdrop-blur: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .bottom-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; }
+    .bottom-icon { width: 38px; height: 38px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+    .bottom-name { font-size: 0.88rem; font-weight: 700; color: #FFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bottom-genre { font-size: 0.72rem; color: rgba(255, 255, 255, 0.6); }
+    .bottom-actions { display: flex; align-items: center; gap: 8px; }
+
+    /* CAR MODE */
+    .car-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      background: #06020D;
+      color: #FFF;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 24px 20px calc(24px + env(safe-area-inset-bottom, 0px));
+      user-select: none;
+    }
+
+    .car-modal.open { display: flex; }
+    .car-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 16px; }
+    .car-clock { font-size: 2rem; font-weight: 800; font-family: monospace; color: var(--accent-gold); }
+    .btn-close-car { width: 48px; height: 48px; border-radius: 16px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.15); color: #FFF; font-size: 1.4rem; cursor: pointer; }
+    .car-center { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 0; }
+    .car-big-icon { font-size: 4.5rem; margin-bottom: 16px; }
+    .car-station-name { font-size: clamp(2rem, 6vw, 3.2rem); font-weight: 900; line-height: 1.1; margin-bottom: 8px; }
+    .car-station-genre { font-size: 1.2rem; color: var(--accent-gold); font-weight: 600; }
+    .car-grid-controls { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 14px; max-width: 650px; width: 100%; margin: 0 auto; }
+    .btn-car-action { height: 84px; border-radius: 24px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.18); color: #FFF; font-size: 1.8rem; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+    .btn-car-action span { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; color: rgba(255, 255, 255, 0.6); }
+    .btn-car-play { background: linear-gradient(135deg, #FFB703, #FB8500); color: #000; border: none; }
+    .btn-car-play span { color: #000; }
+
+    /* MODAL GUIA */
+    .modal-overlay { display: none; position: fixed; inset: 0; z-index: 998; background: rgba(0, 0, 0, 0.8); backdrop-blur: 8px; align-items: center; justify-content: center; padding: 16px; }
+    .modal-overlay.open { display: flex; }
+    .modal-card { background: #140A28; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 24px; max-width: 520px; width: 100%; padding: 24px; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 14px; margin-bottom: 16px; }
+    .step-item { display: flex; gap: 12px; margin-bottom: 14px; }
+    .step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-gold); color: #000; font-weight: 800; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .step-text h4 { font-size: 0.95rem; font-weight: 700; color: #FFF; margin-bottom: 2px; }
+    .step-text p { font-size: 0.82rem; color: rgba(255, 255, 255, 0.7); line-height: 1.4; }
+
+    .footer { margin-top: 40px; text-align: center; font-size: 0.82rem; color: rgba(255, 255, 255, 0.5); line-height: 1.6; }
+    .footer strong { color: rgba(255, 255, 255, 0.8); }
+  </style>
+</head>
+<body>
+
+  <!-- Elemento de áudio nativo -->
+  <audio id="globalAudio" preload="none"></audio>
+
+  <div class="app-container">
+
+    <!-- HEADER -->
+    <header class="header">
+      <div>
+        <div class="header-badge">
+          <span class="pulse-dot"></span>
+          <span>Web Rádio 80s & Bluetooth Car Player</span>
+        </div>
+        <h1 class="header-title">NEUROS SOM 80s</h1>
+        <p class="header-desc">Os maiores hinos, flashbands e sintetizadores em alta fidelidade.</p>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn-car-mode" id="openCarModeBtn">
+          🚗 <span>Modo Carro</span>
+        </button>
+        <button class="btn-guide" id="openGuideBtn">
+          ℹ️ <span>Guia do Carro</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- PLAYER VINIL DECK -->
+    <section class="player-deck" id="playerDeck">
+      <div class="vinyl-wrapper">
+        <div class="tonearm" id="tonearm">
+          <div class="tonearm-head"></div>
+          <div class="tonearm-arm"></div>
+          <div class="tonearm-cartridge"></div>
+        </div>
+        <div class="vinyl-platter">
+          <div class="vinyl-disc" id="vinylDisc">
+            <div class="vinyl-label" id="vinylLabel">
+              <div class="vinyl-label-icon" id="vinylLabelIcon">💋</div>
+              <div class="vinyl-label-text">80s VINYL</div>
+              <div class="vinyl-spindle"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="deck-content">
+        <div>
+          <div class="deck-status-row">
+            <span class="status-pill status-paused" id="playbackStatusPill">⏸️ PRONTO</span>
+            <span style="font-size:0.75rem; color:rgba(255,255,255,0.4);" id="deckBitrate">128 kbps MP3</span>
+          </div>
+
+          <h2 class="deck-station-name" id="deckStationName">
+            <span id="deckStationIcon">💋</span>
+            <span id="deckStationTitle">KISS FM</span>
+          </h2>
+          <div class="deck-station-genre" id="deckStationGenre">Pop / Hits 80s</div>
+
+          <!-- Equalizador animado -->
+          <div class="equalizer-bar-container">
+            <span class="eq-label">AUDIO EQ</span>
+            <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+            <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+            <div class="eq-bar"></div><div class="eq-bar"></div><div class="eq-bar"></div>
+            <div class="eq-bar"></div><div class="eq-bar"></div>
+          </div>
+        </div>
+
+        <div class="deck-controls-row">
+          <div class="playback-btns">
+            <button class="btn-circle" id="prevBtn" title="Anterior">⏮️</button>
+            <button class="btn-play-hero" id="playHeroBtn" title="Tocar / Pausar">
+              <span id="playHeroIcon" style="font-size:1.6rem; margin-left:3px;">▶️</span>
+            </button>
+            <button class="btn-circle" id="nextBtn" title="Próxima">⏭️</button>
+          </div>
+
+          <div class="volume-box">
+            <span id="volumeIcon" style="font-size:1rem; cursor:pointer;">🔊</span>
+            <input type="range" min="0" max="1" step="0.05" value="0.85" class="volume-slider" id="volumeSlider" />
+            <span id="volumePercent" style="font-size:0.75rem; color:rgba(255,255,255,0.5); min-width:32px; text-align:right;">85%</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FILTROS & BUSCA -->
+    <div class="controls-bar">
+      <div class="category-pills" id="categoryPills">
+        <button class="cat-pill active" data-cat="all">📻 Todas</button>
+        <button class="cat-pill" data-cat="favoritas">❤️ Favoritas</button>
+        <button class="cat-pill" data-cat="rock">🤘 Rock</button>
+        <button class="cat-pill" data-cat="pop">🎤 Pop Hits</button>
+        <button class="cat-pill" data-cat="flashback">📼 Flashback</button>
+        <button class="cat-pill" data-cat="dance">🪩 Disco & Dance</button>
+        <button class="cat-pill" data-cat="nacional">🇧🇷 Rock Nacional</button>
+      </div>
+
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" class="search-input" id="searchInput" placeholder="Filtrar rádio..." />
+      </div>
+    </div>
+
+    <!-- GRADE DE RÁDIOS -->
+    <div class="radio-grid" id="radioGrid"></div>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+      <p>🚗 <strong>Compatível com som do carro</strong> via Bluetooth e botões do volante (Media Session).</p>
+      <p style="margin-top:4px;">© 2026 Neuros Som 80s • Versão Estática GitHub • By <strong>Robson Vilela</strong></p>
+    </footer>
+
+  </div>
+
+  <!-- PLAYER FIXO NO RODAPÉ -->
+  <div class="bottom-bar" id="bottomBar">
+    <div class="bottom-info" id="bottomInfo">
+      <div class="bottom-icon" id="bottomIcon">💋</div>
+      <div class="bottom-text">
+        <div class="bottom-name" id="bottomName">KISS FM</div>
+        <div class="bottom-genre" id="bottomGenre">Pop / Hits 80s</div>
+      </div>
+    </div>
+    <div class="bottom-actions">
+      <button class="btn-circle" style="width:36px; height:36px;" id="bottomPrevBtn">⏮️</button>
+      <button class="btn-circle" style="width:42px; height:42px; background:var(--accent-gold); color:#000;" id="bottomPlayBtn">▶️</button>
+      <button class="btn-circle" style="width:36px; height:36px;" id="bottomNextBtn">⏭️</button>
+    </div>
+  </div>
+
+  <!-- MODO CARRO TELA CHEIA -->
+  <div class="car-modal" id="carModal">
+    <div class="car-header">
+      <div>
+        <div style="font-size:0.75rem; color:var(--accent-gold); font-weight:800; letter-spacing:1px; text-transform:uppercase;">
+          🚗 Modo Direção Segura
+        </div>
+        <div style="font-size:0.8rem; color:rgba(255,255,255,0.6);">Botões ampliados para o som do carro</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:16px;">
+        <div class="car-clock" id="carClock">00:00</div>
+        <button class="btn-close-car" id="closeCarModeBtn">✕</button>
+      </div>
+    </div>
+
+    <div class="car-center">
+      <div class="car-big-icon" id="carBigIcon">💋</div>
+      <h2 class="car-station-name" id="carStationName">KISS FM</h2>
+      <div class="car-station-genre" id="carStationGenre">Pop / Hits 80s</div>
+    </div>
+
+    <div class="car-grid-controls">
+      <button class="btn-car-action" id="carPrevBtn">⏮️<span>Anterior</span></button>
+      <button class="btn-car-action btn-car-play" id="carPlayBtn">
+        <div id="carPlayIcon">▶️</div>
+        <span id="carPlayText">TOCAR</span>
+      </button>
+      <button class="btn-car-action" id="carNextBtn">⏭️<span>Próxima</span></button>
+    </div>
+  </div>
+
+  <!-- MODAL DE DICAS -->
+  <div class="modal-overlay" id="guideModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 style="font-size:1.15rem; font-weight:800; color:#FFF;">🚗 Como Usar no Carro</h3>
+        <button id="closeGuideBtn" style="background:none; border:none; color:#FFF; font-size:1.3rem; cursor:pointer;">✕</button>
+      </div>
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <h4>Conexão Bluetooth</h4>
+          <p>Conecte o smartphone ao som do veículo via Bluetooth ou cabo Auxiliar.</p>
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <h4>Comandos no Volante</h4>
+          <p>Você pode avançar ou pausar as músicas diretamente pelos botões de multimídia do carro.</p>
+        </div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <h4>Ative o Modo Carro</h4>
+          <p>Toque no botão "Modo Carro" no topo para usar a tela limpa com relógio e botões gigantes.</p>
+        </div>
+      </div>
+      <button id="dismissGuideBtn" style="margin-top:16px; width:100%; padding:12px; border-radius:14px; background:var(--accent-gold); border:none; color:#000; font-weight:800; cursor:pointer;">
+        Entendido!
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // DADOS DAS 14 RÁDIOS
+    const RADIOS = [
+      { id: "kiss-fm", name: "KISS FM", url: "https://26593.live.streamtheworld.com/RADIO_KISSFM_ADP_SC", color: "#FF4D6D", icon: "💋", genre: "Pop / Hits 80s", category: "pop", bitrate: "128 kbps" },
+      { id: "80s80s-rock", name: "80s80s Rock", url: "https://regiocast.streamabc.net/regc-80s80srock2191507-mp3-192-4255750", color: "#FF7A00", icon: "🤘", genre: "Classic Rock", category: "rock", bitrate: "192 kbps" },
+      { id: "disco-80", name: "Disco 80", url: "https://stream-285.surfernetwork.com/wmb9se6bseruv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJ3bWI5c2U2YnNlcnV2IiwiaG9zdCI6InN0cmVhbS0yODUuc3VyZmVybmV0d29yay5jb20iLCJydHRsIjo1LCJqdGkiOiJ3akN5dWo1VlNwS0RMT09KN3o5clNBIiwiaWF0IjoxNzg4MTM0NTk0LCJleHAiOjE3ODgxMzQ2NTR9.FEVtCLOPKWwi5WXs_w0jEfna8xISM5c-bxSgTPDMPwI", backupUrl: "https://listen.181fm.com/181-super80s_128k.mp3", color: "#E91E63", icon: "🪩", genre: "Disco & Dance 80s", category: "dance", bitrate: "128 kbps" },
+      { id: "rock-nacional", name: "Rock Nacional 80s", url: "https://c4.radioboss.fm:8216/rockva?rva=2", color: "#10B981", icon: "🇧🇷", genre: "Rock Brasileiro", category: "nacional", bitrate: "128 kbps" },
+      { id: "the-cure-radio", name: "The Cure Radio", url: "https://2.mystreaming.net/er/thecure/icecast.audio", color: "#8B5CF6", icon: "🦇", genre: "Post-Punk & Alternative", category: "rock", bitrate: "128 kbps" },
+      { id: "i-love-80s", name: "I Love 80s", url: "https://live1.livemus.com.br:27400/stream", color: "#EC4899", icon: "❤️", genre: "80s Mega Hits", category: "flashback", bitrate: "128 kbps" },
+      { id: "radio-anos-80", name: "Rádio Anos 80 BR", url: "https://stream.zeno.fm/3ywickpd3rkvv", color: "#06B6D4", icon: "🎸", genre: "Flashback Brasil", category: "nacional", bitrate: "128 kbps" },
+      { id: "wonder-80s", name: "Wonder 80s", url: "https://80.streeemer.com/listen/80s/radio.aac", color: "#7C3AED", icon: "✨", genre: "Synthpop & New Wave", category: "pop", bitrate: "96 kbps AAC" },
+      { id: "80s-pop", name: "80s Pop Radio", url: "https://oldies.streeemer.com/listen/oldies/radio.aac", color: "#F59E0B", icon: "🎤", genre: "Pop Radio 80s", category: "pop", bitrate: "96 kbps AAC" },
+      { id: "80s-alive", name: "80s Alive", url: "https://stream.80sa.live/80s-alive.mp3", color: "#14B8A6", icon: "🌟", genre: "80s Classics", category: "flashback", bitrate: "128 kbps" },
+      { id: "its-80s", name: "Its 80s", url: "https://securestream.cuelightsmedia.com.au/listen/80s/low.aac", color: "#3B82F6", icon: "📻", genre: "80s Mix & Anthems", category: "flashback", bitrate: "64 kbps AAC" },
+      { id: "80s-90s-hits", name: "80s90s Hits", url: "https://live.streamthe.world/80s90s-hits", color: "#EF4444", icon: "🎵", genre: "80s & 90s Hits", category: "pop", bitrate: "128 kbps" },
+      { id: "nostalgia-fm", name: "Nostalgia FM", url: "https://centova2.euroti.com.br:20062/;", color: "#D97706", icon: "📼", genre: "Flashback FM", category: "flashback", bitrate: "128 kbps" },
+      { id: "80s-best", name: "80's Best Hits", url: "https://stream-289.surfernetwork.com/g69brm53t8quv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJnNjlicm01M3Q4cXV2IiwiaG9zdCI6InN0cmVhbS0yODkuc3VyZmVybmV0d29yay5jb20iLCJydHRsIjo1LCJqdGkiOiJXQTJPZ284RFRsQ1hveS1PNy1CVXF3IiwiaWF0IjoxNzg4MTM0MTMzLCJleHAiOjE3ODgxMzQxOTN9.HGDq8p3m14cYqZq4F11sQQuULkmGs7bL1k2OvrHL0ro", backupUrl: "https://icecast.walmradio.com:8443/flashback", color: "#0EA5E9", icon: "🎧", genre: "Billboard 80s Hits", category: "flashback", bitrate: "128 kbps" }
+    ];
+
+    let currentStationIndex = 0;
+    let isPlaying = false;
+    let activeCategory = 'all';
+    let searchQuery = '';
+    let favorites = ['kiss-fm', 'disco-80', 'rock-nacional'];
 
     try {
-      await audio.play();
-      setPlaybackStatus('playing');
-    } catch (err) {
-      console.warn('Playback error or autoplay blocked:', err);
-      // If primary failed and backup exists, try backup
-      if (!useBackup && station.backupUrl) {
-        setUsingBackupStream(true);
-        startAudioPlayback(station, true);
-        return;
-      }
-      setPlaybackStatus('error');
-    }
-  }, []);
+      const saved = localStorage.getItem('neuros_favorites_v2');
+      if (saved) favorites = JSON.parse(saved);
+    } catch (e) {}
 
-  // Station selection
-  const handleSelectStation = useCallback((station: RadioStation) => {
-    if (currentStation.id === station.id) {
-      if (playbackStatus === 'playing') {
-        if (audioRef.current) {
-          audioRef.current.pause();
-          setPlaybackStatus('paused');
-        }
+    const audio = document.getElementById('globalAudio');
+    const playerDeck = document.getElementById('playerDeck');
+    const vinylDisc = document.getElementById('vinylDisc');
+    const vinylLabel = document.getElementById('vinylLabel');
+    const vinylLabelIcon = document.getElementById('vinylLabelIcon');
+    const deckStationTitle = document.getElementById('deckStationTitle');
+    const deckStationIcon = document.getElementById('deckStationIcon');
+    const deckStationGenre = document.getElementById('deckStationGenre');
+    const deckBitrate = document.getElementById('deckBitrate');
+    const playbackStatusPill = document.getElementById('playbackStatusPill');
+    const playHeroBtn = document.getElementById('playHeroBtn');
+    const playHeroIcon = document.getElementById('playHeroIcon');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const volumeSlider = document.getElementById('volumeSlider');
+    const volumeIcon = document.getElementById('volumeIcon');
+    const volumePercent = document.getElementById('volumePercent');
+    const radioGrid = document.getElementById('radioGrid');
+    const categoryPills = document.getElementById('categoryPills');
+    const searchInput = document.getElementById('searchInput');
+
+    const bottomName = document.getElementById('bottomName');
+    const bottomGenre = document.getElementById('bottomGenre');
+    const bottomIcon = document.getElementById('bottomIcon');
+    const bottomPlayBtn = document.getElementById('bottomPlayBtn');
+    const bottomPrevBtn = document.getElementById('bottomPrevBtn');
+    const bottomNextBtn = document.getElementById('bottomNextBtn');
+    const bottomInfo = document.getElementById('bottomInfo');
+
+    const carModal = document.getElementById('carModal');
+    const openCarModeBtn = document.getElementById('openCarModeBtn');
+    const closeCarModeBtn = document.getElementById('closeCarModeBtn');
+    const carStationName = document.getElementById('carStationName');
+    const carStationGenre = document.getElementById('carStationGenre');
+    const carBigIcon = document.getElementById('carBigIcon');
+    const carClock = document.getElementById('carClock');
+    const carPlayBtn = document.getElementById('carPlayBtn');
+    const carPlayIcon = document.getElementById('carPlayIcon');
+    const carPlayText = document.getElementById('carPlayText');
+    const carPrevBtn = document.getElementById('carPrevBtn');
+    const carNextBtn = document.getElementById('carNextBtn');
+
+    const guideModal = document.getElementById('guideModal');
+    const openGuideBtn = document.getElementById('openGuideBtn');
+    const closeGuideBtn = document.getElementById('closeGuideBtn');
+    const dismissGuideBtn = document.getElementById('dismissGuideBtn');
+
+    function updateCarClock() {
+      const now = new Date();
+      carClock.textContent = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    }
+    setInterval(updateCarClock, 1000);
+    updateCarClock();
+
+    function selectRadio(index, autoPlay = true) {
+      currentStationIndex = (index + RADIOS.length) % RADIOS.length;
+      const station = RADIOS[currentStationIndex];
+
+      deckStationTitle.textContent = station.name;
+      deckStationIcon.textContent = station.icon;
+      deckStationGenre.textContent = station.genre;
+      deckBitrate.textContent = station.bitrate;
+      vinylLabelIcon.textContent = station.icon;
+      vinylLabel.style.backgroundColor = station.color;
+      playerDeck.style.borderColor = station.color + '66';
+
+      bottomName.textContent = station.name;
+      bottomGenre.textContent = station.genre;
+      bottomIcon.textContent = station.icon;
+
+      carStationName.textContent = station.name;
+      carStationGenre.textContent = station.genre;
+      carBigIcon.textContent = station.icon;
+
+      audio.src = station.url;
+      audio.load();
+
+      if (autoPlay) {
+        setLoadingState();
+        audio.play().then(() => setPlayingState(true)).catch(() => {
+          if (station.backupUrl) {
+            audio.src = station.backupUrl;
+            audio.load();
+            audio.play().then(() => setPlayingState(true)).catch(() => setPlayingState(false));
+          } else {
+            setPlayingState(false);
+          }
+        });
       } else {
-        startAudioPlayback(station);
+        setPlayingState(false);
       }
-      return;
+
+      updateMediaSession(station);
+      renderCards();
     }
 
-    setUsingBackupStream(false);
-    setCurrentStation(station);
-    startAudioPlayback(station);
-  }, [currentStation, playbackStatus, startAudioPlayback]);
-
-  // Play/Pause toggle
-  const handlePlayPause = useCallback(() => {
-    if (!audioRef.current || !currentStation) return;
-
-    if (playbackStatus === 'playing') {
-      audioRef.current.pause();
-      setPlaybackStatus('paused');
-    } else {
-      startAudioPlayback(currentStation, usingBackupStream);
+    function setLoadingState() {
+      playbackStatusPill.className = 'status-pill status-loading';
+      playbackStatusPill.textContent = '⏳ SINTONIZANDO...';
     }
-  }, [playbackStatus, currentStation, startAudioPlayback, usingBackupStream]);
 
-  // Navigation: Next & Previous Station
-  const handleNextStation = useCallback(() => {
-    const currentIndex = RADIOS.findIndex((r) => r.id === currentStation.id);
-    const nextIndex = (currentIndex + 1) % RADIOS.length;
-    handleSelectStation(RADIOS[nextIndex]);
-  }, [currentStation, handleSelectStation]);
+    function setPlayingState(playing) {
+      isPlaying = playing;
+      if (playing) {
+        playerDeck.classList.add('playing');
+        vinylDisc.classList.add('spinning');
+        playbackStatusPill.className = 'status-pill status-live';
+        playbackStatusPill.innerHTML = '<span class="pulse-dot"></span> NO AR • AO VIVO';
+        playHeroIcon.textContent = '⏸️';
+        bottomPlayBtn.textContent = '⏸️';
+        carPlayIcon.textContent = '⏸️';
+        carPlayText.textContent = 'PAUSAR';
+      } else {
+        playerDeck.classList.remove('playing');
+        vinylDisc.classList.remove('spinning');
+        playbackStatusPill.className = 'status-pill status-paused';
+        playbackStatusPill.textContent = '⏸️ PAUSADO';
+        playHeroIcon.textContent = '▶️';
+        bottomPlayBtn.textContent = '▶️';
+        carPlayIcon.textContent = '▶️';
+        carPlayText.textContent = 'TOCAR';
+      }
+      renderCards();
+    }
 
-  const handlePrevStation = useCallback(() => {
-    const currentIndex = RADIOS.findIndex((r) => r.id === currentStation.id);
-    const prevIndex = (currentIndex - 1 + RADIOS.length) % RADIOS.length;
-    handleSelectStation(RADIOS[prevIndex]);
-  }, [currentStation, handleSelectStation]);
+    function togglePlay() {
+      if (isPlaying) {
+        audio.pause();
+        setPlayingState(false);
+      } else {
+        setLoadingState();
+        audio.play().then(() => setPlayingState(true)).catch(() => selectRadio(currentStationIndex, true));
+      }
+    }
 
-  // Media Session API for Bluetooth steering wheel controls & Lock Screen
-  useEffect(() => {
-    if ('mediaSession' in navigator && currentStation) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentStation.name,
-        artist: currentStation.genre,
-        album: 'Neuros Som 80s Music',
-        artwork: [
-          {
-            src: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&auto=format&fit=crop&q=80',
-            sizes: '512x512',
-            type: 'image/jpeg',
-          },
-        ],
+    function prevStation() { selectRadio(currentStationIndex - 1, true); }
+    function nextStation() { selectRadio(currentStationIndex + 1, true); }
+
+    function updateMediaSession(station) {
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: station.name,
+          artist: station.genre,
+          album: 'Neuros Som 80s',
+          artwork: [{ src: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&auto=format&fit=crop&q=80', sizes: '512x512', type: 'image/jpeg' }]
+        });
+        navigator.mediaSession.setActionHandler('play', togglePlay);
+        navigator.mediaSession.setActionHandler('pause', togglePlay);
+        navigator.mediaSession.setActionHandler('nexttrack', nextStation);
+        navigator.mediaSession.setActionHandler('previoustrack', prevStation);
+      }
+    }
+
+    volumeSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      audio.volume = val;
+      volumePercent.textContent = Math.round(val * 100) + '%';
+      volumeIcon.textContent = val === 0 ? '🔇' : (val < 0.5 ? '🔉' : '🔊');
+    });
+
+    volumeIcon.addEventListener('click', () => {
+      if (audio.volume > 0) {
+        audio.volume = 0;
+        volumeSlider.value = 0;
+        volumePercent.textContent = '0%';
+        volumeIcon.textContent = '🔇';
+      } else {
+        audio.volume = 0.85;
+        volumeSlider.value = 0.85;
+        volumePercent.textContent = '85%';
+        volumeIcon.textContent = '🔊';
+      }
+    });
+
+    function toggleFavorite(id) {
+      const idx = favorites.indexOf(id);
+      if (idx > -1) favorites.splice(idx, 1);
+      else favorites.push(id);
+      try { localStorage.setItem('neuros_favorites_v2', JSON.stringify(favorites)); } catch (e) {}
+      renderCards();
+    }
+
+    function renderCards() {
+      let filtered = RADIOS.filter((radio) => {
+        if (activeCategory === 'favoritas') {
+          if (!favorites.includes(radio.id)) return false;
+        } else if (activeCategory !== 'all') {
+          if (radio.category !== activeCategory) return false;
+        }
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          return radio.name.toLowerCase().includes(q) || radio.genre.toLowerCase().includes(q);
+        }
+        return true;
       });
 
-      navigator.mediaSession.setActionHandler('play', () => handlePlayPause());
-      navigator.mediaSession.setActionHandler('pause', () => handlePlayPause());
-      navigator.mediaSession.setActionHandler('nexttrack', () => handleNextStation());
-      navigator.mediaSession.setActionHandler('previoustrack', () => handlePrevStation());
+      if (filtered.length === 0) {
+        radioGrid.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align:center; padding:40px 20px; background:rgba(255,255,255,0.02); border-radius:18px; border:1px solid rgba(255,255,255,0.08);">
+            <div style="font-size:2rem; margin-bottom:8px;">📻</div>
+            <div style="font-weight:700; color:#FFF;">Nenhuma rádio encontrada</div>
+            <p style="font-size:0.82rem; color:rgba(255,255,255,0.5); margin-top:4px;">Tente outra categoria ou remova o filtro de busca.</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+      filtered.forEach((radio) => {
+        const originalIndex = RADIOS.findIndex(r => r.id === radio.id);
+        const isActive = (originalIndex === currentStationIndex);
+        const isFav = favorites.includes(radio.id);
+
+        html += `
+          <div class="radio-card ${isActive ? 'active' : ''} ${isActive && isPlaying ? 'playing' : ''}" onclick="selectRadio(${originalIndex}, true)">
+            <div class="card-top">
+              <div class="card-icon-box" style="background:${radio.color}22; border:1px solid ${radio.color}55;">
+                ${radio.icon}
+              </div>
+              <div class="card-title-group">
+                <div class="card-title">${radio.name}</div>
+                <div class="card-genre">${radio.genre}</div>
+              </div>
+              <button class="card-fav-btn ${isFav ? 'favorited' : ''}" onclick="event.stopPropagation(); toggleFavorite('${radio.id}')" title="Favoritar">
+                ${isFav ? '❤️' : '🤍'}
+              </button>
+            </div>
+
+            <div class="card-bottom">
+              <span class="card-bitrate">${radio.bitrate}</span>
+              <button class="card-play-btn" onclick="event.stopPropagation(); if(${isActive}) { togglePlay(); } else { selectRadio(${originalIndex}, true); }">
+                ${isActive && isPlaying ? '⏸️ Tocando' : '▶️ Ouvir'}
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      radioGrid.innerHTML = html;
     }
-  }, [currentStation, handlePlayPause, handleNextStation, handlePrevStation]);
 
-  // Toggle favorite
-  const handleToggleFavorite = useCallback((stationId: string) => {
-    setFavorites((prev) =>
-      prev.includes(stationId) ? prev.filter((id) => id !== stationId) : [...prev, stationId]
-    );
-  }, []);
-
-  // Filter radios
-  const filteredRadios = useMemo(() => {
-    return RADIOS.filter((radio) => {
-      // Category filter
-      if (activeCategory === 'favoritas') {
-        if (!favorites.includes(radio.id)) return false;
-      } else if (activeCategory !== 'all') {
-        if (radio.category !== activeCategory) return false;
-      }
-
-      // Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchesName = radio.name.toLowerCase().includes(q);
-        const matchesGenre = radio.genre.toLowerCase().includes(q);
-        const matchesDesc = (radio.description || '').toLowerCase().includes(q);
-        return matchesName || matchesGenre || matchesDesc;
-      }
-
-      return true;
+    categoryPills.querySelectorAll('.cat-pill').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        categoryPills.querySelectorAll('.cat-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeCategory = btn.dataset.cat;
+        renderCards();
+      });
     });
-  }, [activeCategory, favorites, searchQuery]);
 
-  const scrollToPlayerDeck = () => {
-    playerDeckRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+    searchInput.addEventListener('input', (e) => {
+      searchQuery = e.target.value;
+      renderCards();
+    });
 
-  return (
-    <div className="min-h-screen bg-radial from-[#180a33] via-[#0d061c] to-[#05020c] text-slate-100 flex flex-col justify-between selection:bg-amber-400 selection:text-black">
-      {/* Hidden native HTML5 Audio element */}
-      <audio
-        ref={audioRef}
-        preload="none"
-        onPlaying={() => setPlaybackStatus('playing')}
-        onPause={() => setPlaybackStatus('paused')}
-        onWaiting={() => setPlaybackStatus('loading')}
-        onError={(e) => {
-          console.warn('Audio stream error', e);
-          if (!usingBackupStream && currentStation?.backupUrl) {
-            setUsingBackupStream(true);
-            startAudioPlayback(currentStation, true);
-          } else {
-            setPlaybackStatus('error');
-          }
-        }}
-      />
+    playHeroBtn.addEventListener('click', togglePlay);
+    prevBtn.addEventListener('click', prevStation);
+    nextBtn.addEventListener('click', nextStation);
+    bottomPlayBtn.addEventListener('click', togglePlay);
+    bottomPrevBtn.addEventListener('click', prevStation);
+    bottomNextBtn.addEventListener('click', nextStation);
+    bottomInfo.addEventListener('click', () => playerDeck.scrollIntoView({ behavior: 'smooth' }));
 
-      {/* Main Content Container */}
-      <main className="w-full max-w-6xl mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-8 flex-1">
-        {/* Header */}
-        <Header
-          onOpenCarMode={() => setIsCarModeOpen(true)}
-          onOpenBluetoothGuide={() => setIsBluetoothGuideOpen(true)}
-          isPlaying={playbackStatus === 'playing'}
-          currentStationName={currentStation?.name}
-        />
+    openCarModeBtn.addEventListener('click', () => carModal.classList.add('open'));
+    closeCarModeBtn.addEventListener('click', () => carModal.classList.remove('open'));
+    carPlayBtn.addEventListener('click', togglePlay);
+    carPrevBtn.addEventListener('click', prevStation);
+    carNextBtn.addEventListener('click', nextStation);
 
-        {/* Turntable Vinyl Player Deck */}
-        <div ref={playerDeckRef} className="mt-5 sm:mt-8 scroll-mt-6">
-          <VinylPlayer
-            currentStation={currentStation}
-            playbackStatus={playbackStatus}
-            volume={volume}
-            isMuted={isMuted}
-            onPlayPause={handlePlayPause}
-            onNextStation={handleNextStation}
-            onPrevStation={handlePrevStation}
-            onVolumeChange={(val) => {
-              setVolume(val);
-              if (isMuted && val > 0) setIsMuted(false);
-            }}
-            onToggleMute={() => setIsMuted((prev) => !prev)}
-            onRetryStream={() => startAudioPlayback(currentStation, true)}
-          />
-        </div>
+    openGuideBtn.addEventListener('click', () => guideModal.classList.add('open'));
+    closeGuideBtn.addEventListener('click', () => guideModal.classList.remove('open'));
+    dismissGuideBtn.addEventListener('click', () => guideModal.classList.remove('open'));
+    guideModal.addEventListener('click', (e) => {
+      if (e.target === guideModal) guideModal.classList.remove('open');
+    });
 
-        {/* CATEGORY FILTER PILLS & SEARCH */}
-        <div className="mt-8 sm:mt-10">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-                <span>📻</span>
-                <span>Estações Selecionadas</span>
-                <span className="text-xs font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2.5 py-0.5 rounded-full ml-1">
-                  {filteredRadios.length} no ar
-                </span>
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
-                Escolha o estilo musical dos anos 80 que mais combina com seu momento
-              </p>
-            </div>
-
-            {/* Quick search input */}
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Buscar rádio ou artista..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white"
-                >
-                  Limpar
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Horizontal scrollable category filters */}
-          <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-            {CATEGORIES.map((cat) => {
-              const isActive = activeCategory === cat.id;
-              const isFav = cat.id === 'favoritas';
-              const favCount = favorites.length;
-
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all whitespace-nowrap active:scale-95 border ${
-                    isActive
-                      ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-lg shadow-amber-400/20'
-                      : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
-                  }`}
-                >
-                  <span>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                  {isFav && favCount > 0 && (
-                    <span
-                      className={`ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                        isActive ? 'bg-slate-950 text-amber-400' : 'bg-rose-500 text-white'
-                      }`}
-                    >
-                      {favCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* RADIO CARDS GRID */}
-        <div className="mt-5">
-          {filteredRadios.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
-              {filteredRadios.map((station) => (
-                <RadioCard
-                  key={station.id}
-                  station={station}
-                  isPlaying={playbackStatus === 'playing'}
-                  isActive={currentStation?.id === station.id}
-                  isFavorite={favorites.includes(station.id)}
-                  onSelect={handleSelectStation}
-                  onToggleFavorite={handleToggleFavorite}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-10 text-center">
-              <Radio className="w-10 h-10 text-slate-500 mx-auto mb-2" />
-              <h4 className="text-base font-bold text-slate-300">
-                {activeCategory === 'favoritas'
-                  ? 'Você ainda não favoritou nenhuma rádio'
-                  : 'Nenhuma rádio encontrada para esta busca'}
-              </h4>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                {activeCategory === 'favoritas'
-                  ? 'Toque no ícone de coração em qualquer rádio para salvá-la como favorita para o carro!'
-                  : 'Tente buscar por outro termo ou mude a categoria acima.'}
-              </p>
-              {activeCategory === 'favoritas' && (
-                <button
-                  onClick={() => setActiveCategory('all')}
-                  className="mt-4 px-4 py-2 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-bold"
-                >
-                  Ver todas as rádios
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* INFORMATIVE SECTION & BLUETOOTH TIPS */}
-        <section className="mt-12 rounded-2xl md:rounded-3xl border border-white/10 bg-white/[0.02] p-6 sm:p-8 backdrop-blur-md">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="flex items-start gap-3.5">
-              <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400 flex-shrink-0">
-                <Car className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm sm:text-base text-white">Pronto para o Automóvel</h3>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Conecte seu celular ao Bluetooth do carro. A interface suporta os botões do volante e visor do painel nativamente.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3.5">
-              <div className="p-2.5 rounded-xl bg-cyan-400/10 border border-cyan-400/20 text-cyan-400 flex-shrink-0">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm sm:text-base text-white">Alta Performance & Baixo Consumo</h3>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Streams compactados em AAC e MP3 de alta taxa para não travar no 4G/5G em viagens e economizar bateria.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-3.5">
-              <div className="p-2.5 rounded-xl bg-pink-400/10 border border-pink-400/20 text-pink-400 flex-shrink-0">
-                <Music2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm sm:text-base text-white">Sem Travamentos</h3>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  Tratamento inteligente de reconexão automática e rotas alternativas para você não ficar sem som na estrada.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-
-      {/* FOOTER */}
-      <footer className="mt-12 border-t border-white/10 bg-black/40 py-6 px-4 text-center text-xs text-slate-500 pb-20 sm:pb-6">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 text-amber-400" />
-            <span>Neuros Som 80s Music • Versão Moderna 2026</span>
-          </p>
-          <p>
-            Desenvolvido com carinho para entusiastas do som dos anos 80 • By <strong className="text-slate-300 font-semibold">Robson Vilela</strong>
-          </p>
-        </div>
-      </footer>
-
-      {/* Sticky Bottom Mini Player for Mobile view */}
-      <BottomPlayerBar
-        currentStation={currentStation}
-        playbackStatus={playbackStatus}
-        onPlayPause={handlePlayPause}
-        onNextStation={handleNextStation}
-        onPrevStation={handlePrevStation}
-        onScrollToPlayer={scrollToPlayerDeck}
-      />
-
-      {/* Dedicated Car Driving Full-Screen Interface */}
-      <CarModeModal
-        isOpen={isCarModeOpen}
-        onClose={() => setIsCarModeOpen(false)}
-        currentStation={currentStation}
-        playbackStatus={playbackStatus}
-        volume={volume}
-        isMuted={isMuted}
-        onPlayPause={handlePlayPause}
-        onNextStation={handleNextStation}
-        onPrevStation={handlePrevStation}
-        onVolumeChange={(val) => {
-          setVolume(val);
-          if (isMuted && val > 0) setIsMuted(false);
-        }}
-        onToggleMute={() => setIsMuted((prev) => !prev)}
-      />
-
-      {/* In-Car & Bluetooth Guide Modal */}
-      <BluetoothGuideModal
-        isOpen={isBluetoothGuideOpen}
-        onClose={() => setIsBluetoothGuideOpen(false)}
-      />
-    </div>
-  );
-}
+    selectRadio(0, false);
+    renderCards();
+  </script>
+</body>
+</html>
