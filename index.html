@@ -1,709 +1,492 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-    <title>Neuros Som 80s</title>
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { 
+  Radio, 
+  Search, 
+  Heart, 
+  Sparkles, 
+  Volume2, 
+  Filter, 
+  Flame, 
+  Music2, 
+  Car, 
+  Info,
+  RotateCcw
+} from 'lucide-react';
+import { RADIOS } from './data/radios';
+import { RadioStation, PlaybackStatus, CategoryFilter } from './types';
+import { Header } from './components/Header';
+import { VinylPlayer } from './components/VinylPlayer';
+import { RadioCard } from './components/RadioCard';
+import { BottomPlayerBar } from './components/BottomPlayerBar';
+import { CarModeModal } from './components/CarModeModal';
+import { BluetoothGuideModal } from './components/BluetoothGuideModal';
 
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+const CATEGORIES: { id: CategoryFilter; label: string; icon: string }[] = [
+  { id: 'all', label: 'Todas', icon: '📻' },
+  { id: 'favoritas', label: 'Favoritas', icon: '❤️' },
+  { id: 'rock', label: 'Rock', icon: '🤘' },
+  { id: 'pop', label: 'Pop Hits', icon: '🎤' },
+  { id: 'flashback', label: 'Flashback', icon: '📼' },
+  { id: 'dance', label: 'Disco & Dance', icon: '🪩' },
+  { id: 'nacional', label: 'Rock Nacional', icon: '🇧🇷' },
+];
 
-    <style>
-        /* ===== RESET & BASE ===== */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+export default function App() {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playerDeckRef = useRef<HTMLDivElement | null>(null);
 
-        html,
-        body {
-            font-family: 'Montserrat', sans-serif;
-            min-height: 100vh;
-            background: radial-gradient(circle at 20% 20%, #2a0f4e 0%, #150a30 35%, #060314 100%);
-            color: #fff;
-            display: flex;
-            justify-content: center;
-            padding: 20px 16px 40px;
-        }
+  // Load initial station & favorites from localStorage if present
+  const [currentStation, setCurrentStation] = useState<RadioStation>(() => {
+    try {
+      const saved = localStorage.getItem('neuros_last_station');
+      if (saved) {
+        const found = RADIOS.find((r) => r.id === saved);
+        if (found) return found;
+      }
+    } catch {
+      // ignore
+    }
+    return RADIOS[0];
+  });
 
-        /* ===== APP WRAPPER ===== */
-        .app {
-            max-width: 980px;
-            width: 100%;
-            margin: 0 auto;
-        }
+  const [playbackStatus, setPlaybackStatus] = useState<PlaybackStatus>('idle');
+  const [volume, setVolume] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('neuros_volume');
+      if (saved !== null) return parseFloat(saved);
+    } catch {
+      // ignore
+    }
+    return 0.85;
+  });
+  const [isMuted, setIsMuted] = useState(false);
 
-        /* ===== HEADER (glass) ===== */
-        .header {
-            background: linear-gradient(120deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 20px;
-            padding: 28px 20px;
-            text-align: center;
-            margin-bottom: 24px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-        }
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('neuros_favorites');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return ['disco-80', 'rock-nacional', 'kiss-fm'];
+  });
 
-        .header h1 {
-            font-family: 'Space Grotesk', sans-serif;
-            color: #FFD15C;
-            font-size: 2.6rem;
-            font-weight: 700;
-            letter-spacing: 1px;
-            text-shadow: 0 0 10px rgba(255, 209, 92, 0.55), 0 0 24px rgba(255, 100, 200, 0.25);
-            animation: glow 2.6s ease-in-out infinite alternate;
-        }
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isCarModeOpen, setIsCarModeOpen] = useState(false);
+  const [isBluetoothGuideOpen, setIsBluetoothGuideOpen] = useState(false);
+  const [usingBackupStream, setUsingBackupStream] = useState(false);
 
-        @keyframes glow {
-            from {
-                text-shadow: 0 0 8px rgba(255, 209, 92, 0.5), 0 0 18px rgba(255, 100, 200, 0.2);
-            }
-            to {
-                text-shadow: 0 0 16px rgba(255, 209, 92, 0.85), 0 0 32px rgba(255, 100, 200, 0.45);
-            }
-        }
+  // Sync volume with audio element and localStorage
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = isMuted ? 0 : volume;
+    }
+    try {
+      localStorage.setItem('neuros_volume', volume.toString());
+    } catch {
+      // ignore
+    }
+  }, [volume, isMuted]);
 
-        .header p {
-            color: rgba(255, 255, 255, 0.78);
-            font-size: 1.02rem;
-            font-weight: 400;
-            margin-top: 6px;
-        }
+  // Sync favorites with localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('neuros_favorites', JSON.stringify(favorites));
+    } catch {
+      // ignore
+    }
+  }, [favorites]);
 
-        /* ===== MAIN CONTAINER (glass) ===== */
-        .main-container {
-            background: rgba(255, 255, 255, 0.035);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 22px;
-            padding: 26px;
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-            margin-bottom: 20px;
-        }
+  // Sync last played station
+  useEffect(() => {
+    if (currentStation) {
+      try {
+        localStorage.setItem('neuros_last_station', currentStation.id);
+      } catch {
+        // ignore
+      }
+    }
+  }, [currentStation]);
 
-        .main-container h3 {
-            text-align: center;
-            font-size: 1.15rem;
-            opacity: 0.9;
-            margin-bottom: 16px;
-            font-weight: 600;
-        }
+  // Play audio safely
+  const startAudioPlayback = useCallback(async (station: RadioStation, useBackup = false) => {
+    if (!audioRef.current) return;
+    const audio = audioRef.current;
+    
+    setPlaybackStatus('loading');
+    const streamUrl = (useBackup && station.backupUrl) ? station.backupUrl : station.url;
 
-        /* ===== GRID DE RÁDIOS ===== */
-        .radio-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
+    // Reset audio source
+    audio.pause();
+    audio.src = streamUrl;
+    audio.load();
 
-        @media (max-width: 600px) {
-            .radio-grid {
-                grid-template-columns: 1fr;
-                gap: 14px;
-            }
-        }
+    try {
+      await audio.play();
+      setPlaybackStatus('playing');
+    } catch (err) {
+      console.warn('Playback error or autoplay blocked:', err);
+      // If primary failed and backup exists, try backup
+      if (!useBackup && station.backupUrl) {
+        setUsingBackupStream(true);
+        startAudioPlayback(station, true);
+        return;
+      }
+      setPlaybackStatus('error');
+    }
+  }, []);
 
-        /* ===== CARD DA RÁDIO ===== */
-        .radio-card {
-            border-radius: 18px;
-            padding: 16px 16px 12px 16px;
-            transition: all 0.25s ease;
-            cursor: pointer;
-            position: relative;
+  // Station selection
+  const handleSelectStation = useCallback((station: RadioStation) => {
+    if (currentStation.id === station.id) {
+      if (playbackStatus === 'playing') {
+        if (audioRef.current) {
+          audioRef.current.pause();
+          setPlaybackStatus('paused');
         }
+      } else {
+        startAudioPlayback(station);
+      }
+      return;
+    }
 
-        .radio-card:hover {
-            transform: translateY(-2px);
-        }
+    setUsingBackupStream(false);
+    setCurrentStation(station);
+    startAudioPlayback(station);
+  }, [currentStation, playbackStatus, startAudioPlayback]);
 
-        .radio-card .top {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
+  // Play/Pause toggle
+  const handlePlayPause = useCallback(() => {
+    if (!audioRef.current || !currentStation) return;
 
-        .radio-card .icon {
-            font-size: 1.8rem;
-            line-height: 1;
-        }
+    if (playbackStatus === 'playing') {
+      audioRef.current.pause();
+      setPlaybackStatus('paused');
+    } else {
+      startAudioPlayback(currentStation, usingBackupStream);
+    }
+  }, [playbackStatus, currentStation, startAudioPlayback, usingBackupStream]);
 
-        .radio-card .info {
-            flex: 1;
-        }
+  // Navigation: Next & Previous Station
+  const handleNextStation = useCallback(() => {
+    const currentIndex = RADIOS.findIndex((r) => r.id === currentStation.id);
+    const nextIndex = (currentIndex + 1) % RADIOS.length;
+    handleSelectStation(RADIOS[nextIndex]);
+  }, [currentStation, handleSelectStation]);
 
-        .radio-card .info .name {
-            font-weight: 700;
-            color: #fff;
-            font-size: 1rem;
-        }
+  const handlePrevStation = useCallback(() => {
+    const currentIndex = RADIOS.findIndex((r) => r.id === currentStation.id);
+    const prevIndex = (currentIndex - 1 + RADIOS.length) % RADIOS.length;
+    handleSelectStation(RADIOS[prevIndex]);
+  }, [currentStation, handleSelectStation]);
 
-        .radio-card .info .genre {
-            font-size: 0.78rem;
-            color: rgba(255, 255, 255, 0.65);
-        }
+  // Media Session API for Bluetooth steering wheel controls & Lock Screen
+  useEffect(() => {
+    if ('mediaSession' in navigator && currentStation) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentStation.name,
+        artist: currentStation.genre,
+        album: 'Neuros Som 80s Music',
+        artwork: [
+          {
+            src: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&auto=format&fit=crop&q=80',
+            sizes: '512x512',
+            type: 'image/jpeg',
+          },
+        ],
+      });
 
-        /* Vinil GIF animado - substitui o ícone da Disco 80 quando está tocando */
-        .vinyl-gif {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            object-fit: cover;
-            animation: spin 2s linear infinite;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 0 15px rgba(233, 30, 99, 0.4);
-        }
+      navigator.mediaSession.setActionHandler('play', () => handlePlayPause());
+      navigator.mediaSession.setActionHandler('pause', () => handlePlayPause());
+      navigator.mediaSession.setActionHandler('nexttrack', () => handleNextStation());
+      navigator.mediaSession.setActionHandler('previoustrack', () => handlePrevStation());
+    }
+  }, [currentStation, handlePlayPause, handleNextStation, handlePrevStation]);
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+  // Toggle favorite
+  const handleToggleFavorite = useCallback((stationId: string) => {
+    setFavorites((prev) =>
+      prev.includes(stationId) ? prev.filter((id) => id !== stationId) : [...prev, stationId]
+    );
+  }, []);
 
-        /* Badge AO VIVO */
-        .live-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            background: rgba(255, 70, 70, 0.18);
-            border: 1px solid rgba(255, 90, 90, 0.55);
-            color: #ff8a8a;
-            font-size: 0.62rem;
-            font-weight: 700;
-            letter-spacing: 0.6px;
-            padding: 3px 9px;
-            border-radius: 20px;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
+  // Filter radios
+  const filteredRadios = useMemo(() => {
+    return RADIOS.filter((radio) => {
+      // Category filter
+      if (activeCategory === 'favoritas') {
+        if (!favorites.includes(radio.id)) return false;
+      } else if (activeCategory !== 'all') {
+        if (radio.category !== activeCategory) return false;
+      }
 
-        .live-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: #ff5c5c;
-            animation: pulse 1.4s ease-in-out infinite;
-        }
+      // Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = radio.name.toLowerCase().includes(q);
+        const matchesGenre = radio.genre.toLowerCase().includes(q);
+        const matchesDesc = (radio.description || '').toLowerCase().includes(q);
+        return matchesName || matchesGenre || matchesDesc;
+      }
 
-        @keyframes pulse {
-            0% {
-                box-shadow: 0 0 0 0 rgba(255, 92, 92, 0.6);
-            }
-            70% {
-                box-shadow: 0 0 0 6px rgba(255, 92, 92, 0);
-            }
-            100% {
-                box-shadow: 0 0 0 0 rgba(255, 92, 92, 0);
-            }
-        }
+      return true;
+    });
+  }, [activeCategory, favorites, searchQuery]);
 
-        /* Botão do card */
-        .radio-card .btn {
-            width: 100%;
-            padding: 10px 16px;
-            font-size: 0.95rem;
-            font-weight: 700;
-            letter-spacing: 0.3px;
-            color: #fff;
-            border-radius: 999px;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            cursor: pointer;
-            background: rgba(255, 255, 255, 0.06);
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
-            font-family: 'Montserrat', sans-serif;
-            text-align: center;
-            user-select: none;
-        }
+  const scrollToPlayerDeck = () => {
+    playerDeckRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-        .radio-card .btn:hover {
-            background: rgba(255, 255, 255, 0.16);
-            border-color: rgba(255, 255, 255, 0.4);
-            transform: translateY(-2px);
-        }
+  return (
+    <div className="min-h-screen bg-radial from-[#180a33] via-[#0d061c] to-[#05020c] text-slate-100 flex flex-col justify-between selection:bg-amber-400 selection:text-black">
+      {/* Hidden native HTML5 Audio element */}
+      <audio
+        ref={audioRef}
+        preload="none"
+        onPlaying={() => setPlaybackStatus('playing')}
+        onPause={() => setPlaybackStatus('paused')}
+        onWaiting={() => setPlaybackStatus('loading')}
+        onError={(e) => {
+          console.warn('Audio stream error', e);
+          if (!usingBackupStream && currentStation?.backupUrl) {
+            setUsingBackupStream(true);
+            startAudioPlayback(currentStation, true);
+          } else {
+            setPlaybackStatus('error');
+          }
+        }}
+      />
 
-        .radio-card .btn:active {
-            transform: translateY(0);
-            filter: brightness(0.95);
-        }
+      {/* Main Content Container */}
+      <main className="w-full max-w-6xl mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-8 flex-1">
+        {/* Header */}
+        <Header
+          onOpenCarMode={() => setIsCarModeOpen(true)}
+          onOpenBluetoothGuide={() => setIsBluetoothGuideOpen(true)}
+          isPlaying={playbackStatus === 'playing'}
+          currentStationName={currentStation?.name}
+        />
 
-        .radio-card .btn.playing {
-            background: rgba(255, 255, 255, 0.10);
-            border-color: rgba(255, 255, 255, 0.3);
-        }
-
-        /* ===== PLAYER ===== */
-        .player-container {
-            background: linear-gradient(135deg, rgba(255, 215, 0, 0.20) 0%, rgba(255, 255, 255, 0.04) 100%);
-            border: 1px solid rgba(255, 215, 0, 0.4);
-            border-radius: 20px;
-            padding: 24px;
-            margin-top: 16px;
-            text-align: center;
-            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
-            animation: slideIn 0.45s ease-out;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(16px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .player-container h2 {
-            font-size: 1.5rem;
-            margin-bottom: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .player-container .genre-tag {
-            color: rgba(255, 255, 255, 0.75);
-            font-size: 1rem;
-            margin-bottom: 14px;
-        }
-
-        /* Equalizador */
-        .equalizer {
-            display: inline-flex;
-            align-items: flex-end;
-            gap: 3px;
-            height: 18px;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-        .equalizer span {
-            width: 3px;
-            background: #FFD15C;
-            border-radius: 2px;
-            animation: eq 1s ease-in-out infinite;
-        }
-        .equalizer span:nth-child(1) {
-            height: 40%;
-            animation-delay: 0s;
-        }
-        .equalizer span:nth-child(2) {
-            height: 100%;
-            animation-delay: 0.2s;
-        }
-        .equalizer span:nth-child(3) {
-            height: 60%;
-            animation-delay: 0.4s;
-        }
-        .equalizer span:nth-child(4) {
-            height: 80%;
-            animation-delay: 0.1s;
-        }
-        @keyframes eq {
-            0%,
-            100% {
-                transform: scaleY(0.4);
-            }
-            50% {
-                transform: scaleY(1);
-            }
-        }
-
-        /* Áudio */
-        .player-container audio {
-            width: 100%;
-            border-radius: 12px;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-            margin-top: 4px;
-        }
-
-        .player-container .progress-bar {
-            width: 100%;
-            height: 6px;
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 4px;
-            margin-top: 12px;
-            overflow: hidden;
-        }
-
-        .player-container .progress-bar .fill {
-            height: 100%;
-            width: 100%;
-            background: linear-gradient(90deg, #FFD15C, #FF8A65);
-            border-radius: 4px;
-            animation: progressPulse 2s ease-in-out infinite alternate;
-        }
-
-        @keyframes progressPulse {
-            0% {
-                opacity: 0.7;
-            }
-            100% {
-                opacity: 1;
-            }
-        }
-
-        .player-container .hint {
-            font-size: 0.78rem;
-            color: rgba(255, 255, 255, 0.5);
-            margin-top: 10px;
-        }
-
-        /* ===== FOOTER ===== */
-        .footer {
-            background: linear-gradient(120deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 18px;
-            padding: 22px;
-            text-align: center;
-            margin-top: 26px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-        }
-
-        .footer h4 {
-            color: #FFD15C;
-            font-size: 1.05rem;
-            margin-bottom: 14px;
-        }
-
-        .footer p {
-            line-height: 1.8;
-            color: rgba(255, 255, 255, 0.85);
-            font-size: 0.92rem;
-        }
-
-        .footer hr {
-            border: none;
-            border-top: 1px solid rgba(255, 255, 255, 0.12);
-            margin: 18px 0;
-        }
-
-        .footer .copy {
-            font-size: 0.78rem;
-            opacity: 0.6;
-            margin-top: 14px;
-        }
-
-        /* ===== RESPONSIVE ===== */
-        @media (max-width: 768px) {
-            .header h1 {
-                font-size: 2rem !important;
-            }
-            .radio-card .btn {
-                font-size: 0.88rem !important;
-                padding: 9px 14px !important;
-            }
-            .vinyl-gif {
-                width: 32px;
-                height: 32px;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .header h1 {
-                font-size: 1.6rem !important;
-            }
-            .main-container {
-                padding: 18px 14px;
-            }
-            .player-container {
-                padding: 18px 14px;
-            }
-            .vinyl-gif {
-                width: 28px;
-                height: 28px;
-            }
-        }
-
-        /* ===== UTIL ===== */
-        .hidden {
-            display: none !important;
-        }
-        .mt-1 {
-            margin-top: 8px;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="app" id="app">
-
-        <!-- HEADER -->
-        <header class="header">
-            <h1>🔊 NEUROS SOM 80s MUSIC</h1>
-            <p>🎧 Escolha sua Rádio Favorita e Aproveite</p>
-        </header>
-
-        <!-- MAIN CONTAINER -->
-        <div class="main-container" id="mainContainer">
-            <h3>📻 Selecione sua rádio</h3>
-
-            <!-- Grid de rádios -->
-            <div class="radio-grid" id="radioGrid"></div>
-
-            <!-- Player (aparece quando uma rádio é selecionada) -->
-            <div id="playerWrapper" class="hidden">
-                <div class="player-container" id="playerContainer">
-                    <h2 id="playerTitle">
-                        <span class="equalizer"><span></span><span></span><span></span><span></span></span>
-                        <span id="playerName">Rádio</span>
-                    </h2>
-                    <div class="genre-tag" id="playerGenre">🎵 Gênero</div>
-                    <audio id="audioPlayer" controls autoplay></audio>
-                    <div class="progress-bar"><div class="fill"></div></div>
-                    <p class="hint" id="playerHint">
-                        Se o som não iniciar automaticamente, toque no botão "Tocando agora" do cartão acima.
-                    </p>
-                </div>
-            </div>
+        {/* Turntable Vinyl Player Deck */}
+        <div ref={playerDeckRef} className="mt-5 sm:mt-8 scroll-mt-6">
+          <VinylPlayer
+            currentStation={currentStation}
+            playbackStatus={playbackStatus}
+            volume={volume}
+            isMuted={isMuted}
+            onPlayPause={handlePlayPause}
+            onNextStation={handleNextStation}
+            onPrevStation={handlePrevStation}
+            onVolumeChange={(val) => {
+              setVolume(val);
+              if (isMuted && val > 0) setIsMuted(false);
+            }}
+            onToggleMute={() => setIsMuted((prev) => !prev)}
+            onRetryStream={() => startAudioPlayback(currentStation, true)}
+          />
         </div>
 
-        <!-- FOOTER -->
-        <footer class="footer">
-            <h4>🚗 Como usar no carro</h4>
-            <p>
-                <strong>1.</strong> Abra este site no navegador do celular<br>
-                <strong>2.</strong> Conecte via Bluetooth ao rádio do carro<br>
-                <strong>3.</strong> Selecione sua rádio favorita<br>
-                <strong>4.</strong> Aproveite sua música!
-            </p>
-            <hr>
-            <p style="font-size:0.85rem; opacity:0.75;">
-                💡 <strong>Dica:</strong> Adicione à tela inicial para acesso rápido!
-            </p>
-            <p class="copy">© 2026 Versão 2.0 HTML by <strong>Robson Vilela</strong></p>
-        </footer>
+        {/* CATEGORY FILTER PILLS & SEARCH */}
+        <div className="mt-8 sm:mt-10">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                <span>📻</span>
+                <span>Estações Selecionadas</span>
+                <span className="text-xs font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2.5 py-0.5 rounded-full ml-1">
+                  {filteredRadios.length} no ar
+                </span>
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                Escolha o estilo musical dos anos 80 que mais combina com seu momento
+              </p>
+            </div>
 
+            {/* Quick search input */}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Buscar rádio ou artista..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400/50 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white"
+                >
+                  Limpar
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Horizontal scrollable category filters */}
+          <div className="mt-4 flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+            {CATEGORIES.map((cat) => {
+              const isActive = activeCategory === cat.id;
+              const isFav = cat.id === 'favoritas';
+              const favCount = favorites.length;
+
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.id)}
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all whitespace-nowrap active:scale-95 border ${
+                    isActive
+                      ? 'bg-amber-400 text-slate-950 border-amber-400 shadow-lg shadow-amber-400/20'
+                      : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                  {isFav && favCount > 0 && (
+                    <span
+                      className={`ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                        isActive ? 'bg-slate-950 text-amber-400' : 'bg-rose-500 text-white'
+                      }`}
+                    >
+                      {favCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* RADIO CARDS GRID */}
+        <div className="mt-5">
+          {filteredRadios.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
+              {filteredRadios.map((station) => (
+                <RadioCard
+                  key={station.id}
+                  station={station}
+                  isPlaying={playbackStatus === 'playing'}
+                  isActive={currentStation?.id === station.id}
+                  isFavorite={favorites.includes(station.id)}
+                  onSelect={handleSelectStation}
+                  onToggleFavorite={handleToggleFavorite}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-10 text-center">
+              <Radio className="w-10 h-10 text-slate-500 mx-auto mb-2" />
+              <h4 className="text-base font-bold text-slate-300">
+                {activeCategory === 'favoritas'
+                  ? 'Você ainda não favoritou nenhuma rádio'
+                  : 'Nenhuma rádio encontrada para esta busca'}
+              </h4>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                {activeCategory === 'favoritas'
+                  ? 'Toque no ícone de coração em qualquer rádio para salvá-la como favorita para o carro!'
+                  : 'Tente buscar por outro termo ou mude a categoria acima.'}
+              </p>
+              {activeCategory === 'favoritas' && (
+                <button
+                  onClick={() => setActiveCategory('all')}
+                  className="mt-4 px-4 py-2 rounded-xl bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-bold"
+                >
+                  Ver todas as rádios
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* INFORMATIVE SECTION & BLUETOOTH TIPS */}
+        <section className="mt-12 rounded-2xl md:rounded-3xl border border-white/10 bg-white/[0.02] p-6 sm:p-8 backdrop-blur-md">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400 flex-shrink-0">
+                <Car className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm sm:text-base text-white">Pronto para o Automóvel</h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Conecte seu celular ao Bluetooth do carro. A interface suporta os botões do volante e visor do painel nativamente.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 rounded-xl bg-cyan-400/10 border border-cyan-400/20 text-cyan-400 flex-shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm sm:text-base text-white">Alta Performance & Baixo Consumo</h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Streams compactados em AAC e MP3 de alta taxa para não travar no 4G/5G em viagens e economizar bateria.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3.5">
+              <div className="p-2.5 rounded-xl bg-pink-400/10 border border-pink-400/20 text-pink-400 flex-shrink-0">
+                <Music2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm sm:text-base text-white">Sem Travamentos</h3>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Tratamento inteligente de reconexão automática e rotas alternativas para você não ficar sem som na estrada.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* FOOTER */}
+      <footer className="mt-12 border-t border-white/10 bg-black/40 py-6 px-4 text-center text-xs text-slate-500 pb-20 sm:pb-6">
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="flex items-center gap-1.5">
+            <Radio className="w-3.5 h-3.5 text-amber-400" />
+            <span>Neuros Som 80s Music • Versão Moderna 2026</span>
+          </p>
+          <p>
+            Desenvolvido com carinho para entusiastas do som dos anos 80 • By <strong className="text-slate-300 font-semibold">Robson Vilela</strong>
+          </p>
+        </div>
+      </footer>
+
+      {/* Sticky Bottom Mini Player for Mobile view */}
+      <BottomPlayerBar
+        currentStation={currentStation}
+        playbackStatus={playbackStatus}
+        onPlayPause={handlePlayPause}
+        onNextStation={handleNextStation}
+        onPrevStation={handlePrevStation}
+        onScrollToPlayer={scrollToPlayerDeck}
+      />
+
+      {/* Dedicated Car Driving Full-Screen Interface */}
+      <CarModeModal
+        isOpen={isCarModeOpen}
+        onClose={() => setIsCarModeOpen(false)}
+        currentStation={currentStation}
+        playbackStatus={playbackStatus}
+        volume={volume}
+        isMuted={isMuted}
+        onPlayPause={handlePlayPause}
+        onNextStation={handleNextStation}
+        onPrevStation={handlePrevStation}
+        onVolumeChange={(val) => {
+          setVolume(val);
+          if (isMuted && val > 0) setIsMuted(false);
+        }}
+        onToggleMute={() => setIsMuted((prev) => !prev)}
+      />
+
+      {/* In-Car & Bluetooth Guide Modal */}
+      <BluetoothGuideModal
+        isOpen={isBluetoothGuideOpen}
+        onClose={() => setIsBluetoothGuideOpen(false)}
+      />
     </div>
-
-    <script>
-        // ================================================================
-        // DADOS DAS RÁDIOS
-        // ================================================================
-        const RADIOS = {
-            "KISS FM": {
-                url: "https://26593.live.streamtheworld.com/RADIO_KISSFM_ADP_SC",
-                color: "#FF6B6B",
-                icon: "💋",
-                genre: "Pop/Hits",
-                format: "audio/mpeg"
-            },
-            "80s80s Rock": {
-                url: "https://regiocast.streamabc.net/regc-80s80srock2191507-mp3-192-4255750",
-                color: "#FF8E53",
-                icon: "🤘",
-                genre: "Rock",
-                format: "audio/mpeg"
-            },
-            "The Cure Radio": {
-                url: "https://2.mystreaming.net/er/thecure/icecast.audio",
-                color: "#8A2BE2",
-                icon: "🦇",
-                genre: "Alternative",
-                format: "audio/mpeg"
-            },
-            "I Love 80s": {
-                url: "https://live1.livemus.com.br:27400/stream",
-                color: "#FF69B4",
-                icon: "❤️",
-                genre: "80s Hits",
-                format: "audio/mpeg"
-            },
-            "Wonder 80s": {
-                url: "https://80.streeemer.com/listen/80s/radio.aac",
-                color: "#9370DB",
-                icon: "✨",
-                genre: "80s",
-                format: "audio/aac"
-            },
-            "80s Pop": {
-                url: "https://oldies.streeemer.com/listen/oldies/radio.aac",
-                color: "#FFA500",
-                icon: "🎤",
-                genre: "Pop",
-                format: "audio/aac"
-            },
-            "80s Alive": {
-                url: "https://stream.80sa.live/80s-alive.mp3",
-                color: "#32CD32",
-                icon: "🌟",
-                genre: "80s Classics",
-                format: "audio/mpeg"
-            },
-            "Rádio Anos 80": {
-                url: "https://stream.zeno.fm/3ywickpd3rkvv",
-                color: "#4ECDC4",
-                icon: "🎸",
-                genre: "BR 80s",
-                format: "audio/mpeg"
-            },
-            "Its 80s": {
-                url: "https://securestream.cuelightsmedia.com.au/listen/80s/low.aac",
-                color: "#6A8EAE",
-                icon: "📻",
-                genre: "80s Mix",
-                format: "audio/aac"
-            },
-            "80s90s Hits": {
-                url: "https://live.streamthe.world/80s90s-hits",
-                color: "#E74C3C",
-                icon: "🎵",
-                genre: "80s/90s",
-                format: "audio/mpeg"
-            },
-            "Nostalgia FM": {
-                url: "https://centova2.euroti.com.br:20062/;",
-                color: "#F39C12",
-                icon: "📼",
-                genre: "Flashback / Nostalgia",
-                format: "audio/mpeg"
-            },
-            "80's Best": {
-                url: "https://stream-289.surfernetwork.com/g69brm53t8quv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJnNjlicm01M3Q4cXV2IiwiaG9zdCI6InN0cmVhbS0yODkuc3VyZmVybmV0d29yay5jb20iLCJydHRsIjo1LCJqdGkiOiJXQTJPZ284RFRsQ1hveS1PNy1CVXF3IiwiaWF0IjoxNzg4MTM0MTMzLCJleHAiOjE3ODgxMzQxOTN9.HGDq8p3m14cYqZq4F11sQQuULkmGs7bL1k2OvrHL0ro",
-                color: "#1ABC9C",
-                icon: "🎧",
-                genre: "80s Best Hits",
-                format: "audio/mpeg"
-            },
-            "Disco 80": {
-                url: "https://stream-285.surfernetwork.com/wmb9se6bseruv?zt=eyJhbGciOiJIUzI1NiJ9.eyJzdHJlYW0iOiJ3bWI5c2U2YnNlcnV2IiwiaG9zdCI6InN0cmVhbS0yODUuc3VyZmVybmV0d29yay5jb20iLCJydHRsIjo1LCJqdGkiOiJ3akN5dWo1VlNwS0RMT09KN3o5clNBIiwiaWF0IjoxNzg4MTM0NTk0LCJleHAiOjE3ODgxMzQ2NTR9.FEVtCLOPKWwi5WXs_w0jEfna8xISM5c-bxSgTPDMPwI",
-                color: "#E91E63",
-                icon: "🪩",
-                genre: "Disco / 80s Dance",
-                format: "audio/mpeg",
-                // Marcação especial para usar GIF de vinil
-                useVinylGif: true
-            },
-            // ===== RÁDIO ROCK NACIONAL =====
-            "Rock Nacional": {
-                url: "https://c4.radioboss.fm:8216/rockva?rva=2",
-                color: "#2ECC71",
-                icon: "🇧🇷",
-                genre: "Rock Nacional",
-                format: "audio/mpeg"
-            }
-        };
-
-        // ================================================================
-        // ESTADO
-        // ================================================================
-        let currentRadio = null;
-        const radioNames = Object.keys(RADIOS);
-
-        // ================================================================
-        // DOM REFS
-        // ================================================================
-        const grid = document.getElementById('radioGrid');
-        const playerWrapper = document.getElementById('playerWrapper');
-        const playerName = document.getElementById('playerName');
-        const playerGenre = document.getElementById('playerGenre');
-        const audioEl = document.getElementById('audioPlayer');
-        const playerHint = document.getElementById('playerHint');
-        const playerContainer = document.getElementById('playerContainer');
-
-        // ================================================================
-        // FUNÇÕES
-        // ================================================================
-
-        function updatePlayerColor(color) {
-            playerContainer.style.background =
-                `linear-gradient(135deg, ${color}33 0%, rgba(255,255,255,0.04) 100%)`;
-            playerContainer.style.borderColor = `${color}66`;
-        }
-
-        function playRadio(name) {
-            const info = RADIOS[name];
-            if (!info) return;
-
-            currentRadio = name;
-            playerName.textContent = `${info.icon} ${name}`;
-            playerGenre.textContent = `🎵 ${info.genre}`;
-            audioEl.src = info.url;
-            audioEl.type = info.format || 'audio/mpeg';
-            audioEl.load();
-            audioEl.play().catch(() => {});
-            playerWrapper.classList.remove('hidden');
-            updatePlayerColor(info.color);
-            playerHint.textContent = 'Se o som não iniciar automaticamente, toque no botão "Tocando agora" do cartão acima.';
-            renderCards();
-        }
-
-        function renderCards() {
-            let html = '';
-            for (const name of radioNames) {
-                const info = RADIOS[name];
-                const isPlaying = (currentRadio === name);
-                const borderGlow = isPlaying ?
-                    `0 0 0 1px ${info.color}aa, 0 8px 22px rgba(0,0,0,0.35)` :
-                    `0 6px 16px rgba(0,0,0,0.25)`;
-                const bgGrad = `linear-gradient(155deg, ${info.color}26, rgba(255,255,255,0.03))`;
-                const borderColor = `${info.color}55`;
-                const badgeHTML = isPlaying ?
-                    `<span class="live-badge"><span class="live-dot"></span>NO AR</span>` :
-                    '';
-                const btnText = isPlaying ? '⏸️ Tocando agora' : '▶️ Ouvir agora';
-                const btnClass = isPlaying ? 'btn playing' : 'btn';
-
-                // Verifica se é a Disco 80 e se deve usar o GIF de vinil
-                let iconHtml = info.icon;
-                if (info.useVinylGif && isPlaying) {
-                    iconHtml = `<img src="https://i.gifer.com/origin/5d/5d1eabe22fa5f85c5aacb810baa46281_w200.gif" alt="Vinil" class="vinyl-gif" />`;
-                } else if (info.useVinylGif && !isPlaying) {
-                    iconHtml = info.icon;
-                }
-
-                html += `
-                    <div class="radio-card" style="background:${bgGrad}; border:1px solid ${borderColor}; box-shadow:${borderGlow};"
-                         data-radio="${name}">
-                        <div class="top">
-                            <div class="icon">${iconHtml}</div>
-                            <div class="info">
-                                <div class="name">${name}</div>
-                                <div class="genre">${info.genre}</div>
-                            </div>
-                            ${badgeHTML}
-                        </div>
-                        <button class="${btnClass}" data-radio="${name}">${btnText}</button>
-                    </div>
-                `;
-            }
-            grid.innerHTML = html;
-
-            const cards = grid.querySelectorAll('.radio-card');
-            cards.forEach(card => {
-                const name = card.dataset.radio;
-                const btn = card.querySelector('.btn');
-                card.addEventListener('click', (e) => {
-                    if (e.target.tagName === 'BUTTON') return;
-                    handleRadioClick(name);
-                });
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    handleRadioClick(name);
-                });
-            });
-        }
-
-        function handleRadioClick(name) {
-            const info = RADIOS[name];
-            if (!info) return;
-            if (currentRadio === name) {
-                audioEl.play().catch(() => {});
-                return;
-            }
-            playRadio(name);
-        }
-
-        // ================================================================
-        // INICIALIZAÇÃO
-        // ================================================================
-        renderCards();
-        console.log('🎵 Neuros Som 80s carregado!');
-    </script>
-
-</body>
-</html>
+  );
+}
